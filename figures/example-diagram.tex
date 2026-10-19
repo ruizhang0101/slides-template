@@ -1,0 +1,38 @@
+% An example box-and-arrow diagram, showing the house style.
+% Styles (tmbox, tmboxfill, tmarrow, tmdiagram*) come from style.sty.
+%
+% Two rules worth keeping:
+%   - tmbox (gray outline) is the default for everything;
+%   - tmboxfill (pale blue) marks the ONE thing the diagram is about.
+%     At most one kind of fill per diagram, or the emphasis stops meaning
+%     anything.
+%
+% Width here stands for capacity, so the stack reads as a hierarchy
+% without needing numbers on it.
+\begin{tikzpicture}[x=1cm, y=1cm]
+
+  % ---- the three tiers, smallest at the top --------------------------
+  \node[tmbox, minimum width=3.8cm, minimum height=0.95cm] (top)
+    at (-0.5,1.6)
+    {Top tier\\{\scriptsize\color{tmgray}fast, and there is little of it}};
+  \node[tmbox, minimum width=5.2cm, minimum height=0.95cm] (mid)
+    at (-0.5,0.5)
+    {Middle tier\\{\scriptsize\color{tmgray}slower, and there is more of it}};
+  \node[tmbox, minimum width=6.6cm, minimum height=0.95cm] (bottom)
+    at (-0.5,-0.6)
+    {Bottom tier\\{\scriptsize\color{tmgray}slowest, and effectively unbounded}};
+
+  % ---- who owns what: the filled box is the subject of the slide -----
+  \node[tmbox, minimum width=2.6cm, minimum height=0.95cm]
+    at (4.2,1.6) {Someone else};
+  \node[tmboxfill, minimum width=2.6cm, minimum height=2.05cm]
+    at (4.2,-0.05) {Your system};
+
+  % ---- the axis ------------------------------------------------------
+  \node[tmdiagramnote, anchor=east, text width=1.9cm] (fast) at (-4.1,1.6)
+    {fastest,\\least of it};
+  \node[tmdiagramnote, anchor=east, text width=1.9cm] (slow) at (-4.1,-0.6)
+    {slowest,\\most of it};
+  \draw[tmarrow] ([xshift=-0.3cm]slow.north east) -- ([xshift=-0.3cm]fast.south east);
+
+\end{tikzpicture}

@@ -1,0 +1,30 @@
+\documentclass[aspectratio=169]{beamer}
+
+% A reusable Beamer template.
+% Derived from "Why a KV cache, and what LMCache adds" by Bo Jiang
+% (Tensormesh), Apache 2.0 -- see LICENSE and NOTICE.
+%
+% theme.sty -- knobs you tweak (colors, fonts, sizes, geometry).
+% style.sty -- implementation (templates, navbar machinery).
+% Load order matters: theme before style.
+\usepackage{theme}
+\usepackage{style}
+
+\setbeamertemplate{navigation symbols}{}
+
+% Speaker notes are \pdfpcnote{...} inside each frame. Open the PDF in
+% pdfpc or pympress to see them on the presenter screen; ordinary PDF
+% viewers do not show them.
+
+\title{Your talk title}
+\author{Your Name}
+\institute{Your Institution}
+\date{Month Year}
+
+\begin{document}
+
+\maketitlepage[Optional spoken note for the title slide.]
+
+\input{sections/01-example}
+
+\end{document}

@@ -1,0 +1,532 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{style}[2026/05/04 Beamer style -- implementation]
+
+% ====================================================================
+%  Implementation of the slide layout. Edit theme.sty for colors,
+%  fonts, and bar geometry; this file wires those values into beamer
+%  templates and implements the custom navigation bar.
+% ====================================================================
+
+\RequirePackage{tikz}
+\RequirePackage{graphicx}
+\RequirePackage{etoolbox}
+% pgfplots drives the chart styles only; box-and-arrow diagrams need just
+% tikz. Guarded so the theme still builds on a minimal TeX install.
+\newif\ifthemehaspgfplots
+\IfFileExists{pgfplots.sty}{\themehaspgfplotstrue}{\themehaspgfplotsfalse}
+\ifthemehaspgfplots
+  \RequirePackage{pgfplots}
+  \pgfplotsset{compat=1.18}
+\else
+  \PackageWarning{style}{pgfplots.sty not found: chart styles are
+    unavailable. Diagrams and every other feature still work}
+\fi
+
+% ====================================================================
+%  Chart house style
+%
+%  Every chart in the deck uses `tmaxis` so they read as one system:
+%  recessive gray grid, no box, thin marks, text in ink rather than in
+%  the series color (a colored mark beside a label carries identity;
+%  colored text does not survive projection).
+% ====================================================================
+\ifthemehaspgfplots
+\pgfplotsset{
+  tmaxis/.style={
+    axis lines=left,
+    axis line style={draw=chartgrid, line width=0.5pt, -},
+    tick align=outside, tick style={draw=chartgrid},
+    ymajorgrids=true, xmajorgrids=false,
+    major grid style={draw=chartgrid!40, line width=0.4pt},
+    every axis label/.style={font=\footnotesize, text=tmgray},
+    tick label style={font=\footnotesize, text=tmgray},
+    label style={font=\footnotesize, text=tmgray},
+    clip=false,
+  },
+  tmline/.style={line width=1pt, mark size=2.2pt},
+}
+\fi
+
+% ====================================================================
+%  Diagram house style
+%
+%  Box-and-arrow diagrams follow the same restraint as the charts:
+%  gray outlines, ink text, and the one pale-blue fill reserved for
+%  whatever the slide is actually about. Libraries are loaded here so
+%  files under figures/ stay pure geometry.
+% ====================================================================
+\usetikzlibrary{positioning, arrows.meta, fit}
+\tikzset{
+  tmbox/.style={
+    draw=tmgray, line width=0.6pt, rounded corners=2pt,
+    fill=white, text=tmink, font=\footnotesize,
+    inner sep=4pt, align=center,
+  },
+  tmboxfill/.style={tmbox, draw=tmbluedeep, fill=tmbluepale},
+  tmdiagramtitle/.style={font=\footnotesize\bfseries, text=tmbluedeep,
+    align=center},
+  tmdiagramlabel/.style={font=\footnotesize, text=tmink, align=center},
+  tmdiagramnote/.style={font=\scriptsize, text=tmgray, align=center},
+  tmarrow/.style={draw=tmgray, line width=0.6pt,
+    -{Stealth[length=4pt, width=3pt]}},
+}
+
+% ====================================================================
+%  Brand mark (top-left of every slide)
+%
+%  Drop a file named `icon.png` next to main.tex to use it. Otherwise
+%  a plain ink square is drawn. The mark is rendered both as a
+%  background overlay (so it appears on [plain] frames where the
+%  headline is suppressed) and on top of the navbar (so it always
+%  sits visually flush in the corner).
+%
+%  The shipped icon.png is the Tensormesh mark knocked out of an ink
+%  square. It butts directly against the navbar progress fill, which
+%  is why `navactivebg` in theme.sty must keep that same ink value.
+% ====================================================================
+\newcommand{\brandlogo}{%
+  \IfFileExists{icon.png}{%
+    \includegraphics[height=\navbarheight]{icon.png}%
+  }{%
+    \begin{tikzpicture}
+      \fill[navactivebg] (0,0) rectangle (\navbarheight,\navbarheight);
+    \end{tikzpicture}%
+  }%
+}
+
+\addtobeamertemplate{background}{}{%
+  \begin{tikzpicture}[remember picture, overlay]
+    \node[anchor=north west, inner sep=0pt, outer sep=0pt]
+      at (current page.north west) {\brandlogo};
+  \end{tikzpicture}%
+}
+
+% ====================================================================
+%  Beamer color wiring
+%
+%  Bind beamer's named color slots to the colors defined in theme.sty.
+% ====================================================================
+\setbeamercolor{title}{fg=titlefg}
+\setbeamercolor{subtitle}{fg=subtitlefg}
+\setbeamercolor{author}{fg=authorfg}
+\setbeamercolor{institute}{fg=institutefg}
+\setbeamercolor{section in head/foot}{bg=navactivebg, fg=navactivefg}
+\setbeamercolor{section in head/foot shaded}{bg=navbarbg, fg=navbarfg}
+\setbeamercolor{frametitle}{fg=frametitlefg}
+\setbeamercolor{framesubtitle}{fg=framesubtitlefg}
+\setbeamercolor{page number}{fg=pagenumberfg}
+\setbeamercolor{date}{fg=datefg}
+\setbeamercolor{alerted text}{fg=accent}
+\setbeamercolor{structure}{fg=accent}      % itemize/enumerate markers
+
+% ====================================================================
+%  Top navigation bar
+%
+%  Each section's slot is sized in proportion to the number of frames
+%  in that section, so a long section visually claims more of the bar
+%  -- but never narrower than its own name plus \navbarslotpad on each
+%  side. Slots that would fall below that minimum are held at it, and
+%  the rest of the bar is shared proportionally among the others.
+%  Adjacent slots are separated by a thin vertical rule. The current
+%  section's text is rendered with full opacity; the others are faded.
+%
+%  Implementation:
+%   - The \section{...} command is wrapped to (a) tell beamer about
+%     the section as usual, and (b) flush the *previous* section's
+%     accumulated frame count to the .aux file.
+%   - Each \begin{frame} bumps a per-section counter (via etoolbox).
+%   - On the next compile, the .aux replays \navbar@registerentry{...}
+%     for every section before any frame is rendered, so the bar can
+%     show the full section list (with correct proportions) from the
+%     very first slide.
+%   - Two compiles are required for the bar to settle (latexmk handles
+%     this automatically).
+% ====================================================================
+\makeatletter
+
+\newcounter{navbar@runidx}        % running section index during build
+\newcounter{navbar@total}         % total sections (set by aux replay)
+\newcounter{navbar@frameinsec}    % frames in the section currently being built
+\newcounter{navbar@totalframes}   % sum of frames across all sections (aux replay)
+\def\navbar@list{}                % accumulated entries (aux replay)
+\def\navbar@curtitle{}            % title of section currently being built
+\def\navbar@curidx{0}
+
+% Wrap \section so we can (a) flush the prior section's frame count
+% and (b) start counting frames for the new section.
+\let\navbar@oldsection\section
+\NewDocumentCommand{\@navbar@section}{s o m}{%
+  \navbar@flushpending%
+  \IfBooleanTF{#1}%
+    {\navbar@oldsection*{#3}}%
+    {\IfNoValueTF{#2}%
+      {\navbar@oldsection{#3}}%
+      {\navbar@oldsection[#2]{#3}}%
+     \stepcounter{navbar@runidx}%
+     \xdef\navbar@curidx{\arabic{navbar@runidx}}%
+     \xdef\navbar@curtitle{\unexpanded{#3}}%
+     \setcounter{navbar@frameinsec}{0}%
+    }%
+}
+\let\section\@navbar@section
+
+% \protected@write\@auxout is *deferred* (next shipout). At
+% \AtEndDocument no shipout follows the final flush, so we must use
+% \immediate\write or the last section is silently dropped from
+% the navbar.
+\def\navbar@flushpending{%
+  \ifx\navbar@curtitle\@empty\else
+    \immediate\write\@auxout{%
+      \string\navbar@registerentry%
+        {\navbar@curidx}%
+        {\navbar@curtitle}%
+        {\arabic{navbar@frameinsec}}%
+    }%
+    \xdef\navbar@curtitle{}%
+  \fi%
+}
+
+\AtEndDocument{\navbar@flushpending}
+
+% Bump the per-section frame counter at every \begin{frame}. (Does
+% not count \frame{...} shorthand or \againframe; this template only
+% uses the env form.)
+\AtBeginEnvironment{frame}{\stepcounter{navbar@frameinsec}}
+
+% Replayed from the .aux file at \begin{document}, before any frame.
+% Besides the draw list, keep each section's title and frame count
+% addressable by index, for the slot-width pass below.
+\providecommand{\navbar@registerentry}[3]{%
+  \xappto\navbar@list{%
+    \noexpand\navbar@drawitem{#1}{\unexpanded{#2}}{#3}%
+  }%
+  \expandafter\gdef\csname navbar@t@#1\endcsname{#2}%
+  \expandafter\xdef\csname navbar@f@#1\endcsname{#3}%
+  \setcounter{navbar@total}{#1}%
+  \addtocounter{navbar@totalframes}{#3}%
+}
+
+\newlength{\navbar@itemwidth}
+\newlength{\navbar@unitwidth}
+\newlength{\navbar@progresswidth}
+\newlength{\navbar@free}
+\newcount\navbar@i
+\newcount\navbar@freeframes
+\newcount\navbar@done
+\newcount\navbar@cum
+\newif\ifnavbar@changed
+
+% Per-section values, keyed by \navbar@i: t = title, f = frames,
+% min = narrowest allowed slot, fix = 1 once held at min, w = width.
+\def\navbar@get#1{\csname navbar@#1@\the\navbar@i\endcsname}
+\def\navbar@set#1#2{%
+  \expandafter\edef\csname navbar@#1@\the\navbar@i\endcsname{#2}}
+
+% Run #1 once per section, with \navbar@i = 1 .. total. (Not nestable.)
+\def\navbar@forsections#1{%
+  \navbar@i=1
+  \loop\ifnum\navbar@i<\numexpr\value{navbar@total}+1\relax
+    #1\advance\navbar@i 1
+  \repeat}
+
+% Hold at the minimum every slot whose proportional share is below it,
+% then recompute the share of the remaining slots; repeat until no new
+% slot is held. Ends after at most one pass per section.
+\def\navbar@settle{%
+  \navbar@changedfalse
+  \navbar@free=\dimexpr\paperwidth-\navlogogap\relax
+  \navbar@freeframes=0
+  \navbar@forsections{%
+    \ifnum\navbar@get{fix}=1
+      \advance\navbar@free-\navbar@get{min}\relax
+    \else
+      \advance\navbar@freeframes\navbar@get{f}\relax
+    \fi}%
+  \ifnum\navbar@freeframes>0
+    \navbar@unitwidth=\dimexpr\navbar@free/\navbar@freeframes\relax
+  \else
+    \navbar@unitwidth=0pt
+  \fi
+  \navbar@forsections{%
+    \ifnum\navbar@get{fix}=0
+      \ifdim\dimexpr\navbar@get{f}\navbar@unitwidth\relax<\navbar@get{min}\relax
+        \navbar@set{fix}{1}\navbar@changedtrue
+      \fi
+    \fi}%
+  \ifnavbar@changed\expandafter\navbar@settle\fi}
+
+% Slot widths and progress fill for the current frame.
+\def\navbar@layout{%
+  \navbar@forsections{%
+    \setbox0=\hbox{\usebeamerfont{section in head/foot}\navbar@get{t}}%
+    \navbar@set{min}{\the\dimexpr\wd0+2\navbarslotpad\relax}%
+    \navbar@set{fix}{0}}%
+  \navbar@settle
+  \navbar@forsections{%
+    \ifnum\navbar@get{fix}=1
+      \navbar@set{w}{\navbar@get{min}}%
+    \else
+      \navbar@set{w}{\the\dimexpr\navbar@get{f}\navbar@unitwidth\relax}%
+    \fi}%
+  % Progress fill covers every frame up to and including the current
+  % one. The title page is frame 1 with [plain] (no headline rendered),
+  % so the first content slide already shows its own share of fill,
+  % and the bar is fully filled on the last slide. Within a section,
+  % each frame fills an equal share of that section's slot.
+  \navbar@progresswidth=0pt
+  \navbar@cum=0
+  \navbar@forsections{%
+    \navbar@done=\numexpr\insertframenumber-1-\navbar@cum\relax
+    \ifnum\navbar@done<\navbar@get{f}\relax
+      \ifnum\navbar@done>0
+        \advance\navbar@progresswidth
+          \dimexpr\navbar@get{w}*\navbar@done/\navbar@get{f}\relax
+      \fi
+    \else
+      \advance\navbar@progresswidth\navbar@get{w}\relax
+    \fi
+    \advance\navbar@cum\navbar@get{f}\relax}}
+
+% Draw one section slot (and a separator after it, except for the last).
+% Separators are \rlap'd so they have zero horizontal advance; with
+% real-width separators (0.4pt each) the cumulative offset would push
+% later section slots out of alignment with the progress fill.
+\newcommand{\navbar@drawitem}[3]{%
+  % #1 = section number, #2 = title, #3 = frames in this section
+  \setlength{\navbar@itemwidth}{\csname navbar@w@#1\endcsname}%
+  \makebox[\navbar@itemwidth][c]{%
+    \usebeamerfont{section in head/foot}%
+    \ifnum#1=\insertsectionnumber\relax
+      \usebeamercolor[fg]{section in head/foot}%
+    \else
+      \usebeamercolor[fg]{section in head/foot shaded}%
+    \fi
+    #2}%
+  \ifnum#1<\value{navbar@total}\relax
+    \rlap{\textcolor{navbarfg!50}%
+      {\vrule width 0.4pt height 0.7\navbarheight depth 0.3\navbarheight}}%
+  \fi
+}
+
+\setbeamertemplate{headline}{%
+  \leavevmode%
+  \ifnum\value{navbar@totalframes}>0\relax
+    \navbar@layout
+  \else
+    \setlength{\navbar@progresswidth}{0pt}%
+  \fi
+  \begin{beamercolorbox}[wd=\paperwidth,
+                         ht=0.7\navbarheight, dp=0.3\navbarheight,
+                         sep=0pt]{section in head/foot shaded}%
+    % Progress fill spans from the very left edge of the bar (under
+    % the icon) to the current frame's position, so the icon-area
+    % never shows the unfilled bar color.
+    \rlap{\color{navactivebg}%
+      \rule[-0.3\navbarheight]%
+        {\dimexpr\navbar@progresswidth+\navlogogap\relax}{\navbarheight}}%
+    \hspace*{\navlogogap}%
+    % Leading separator (left of the first section slot). \rlap'd
+    % for the same reason as inter-section separators above.
+    \rlap{\textcolor{navbarfg!50}%
+      {\vrule width 0.4pt height 0.7\navbarheight depth 0.3\navbarheight}}%
+    \navbar@list%
+  \end{beamercolorbox}%
+  \begin{tikzpicture}[remember picture, overlay]
+    \node[anchor=north west, inner sep=0pt, outer sep=0pt]
+      at (current page.north west) {\brandlogo};
+  \end{tikzpicture}%
+}
+
+% ====================================================================
+%  Frame title (and optional subtitle via the second arg of
+%  \begin{frame}{Title}{Subtitle} or via \framesubtitle{...}).
+% ====================================================================
+\setbeamertemplate{frametitle}{%
+  \vspace*{0.25cm}%
+  {\usebeamercolor[fg]{frametitle}\usebeamerfont{frametitle}%
+    \insertframetitle\par}%
+  \ifx\insertframesubtitle\@empty\else
+    \vspace{0.05cm}%
+    {\usebeamercolor[fg]{framesubtitle}\usebeamerfont{framesubtitle}%
+      \insertframesubtitle\par}%
+  \fi
+}
+
+% ====================================================================
+%  Page number (bottom-right). Suppressed on [plain] slides.
+%
+%  Title page is frame 1 with [plain] (footline suppressed); the
+%  first content slide is frame 2. Subtract 1 so the printed page
+%  number starts at 1 on the first content slide.
+% ====================================================================
+\setbeamertemplate{footline}{%
+  \leavevmode%
+  \hbox to \paperwidth{%
+    \hfil
+    {\usebeamerfont{page number}\usebeamercolor[fg]{page number}%
+      \the\numexpr\insertframenumber-1\relax}%
+    \hspace*{0.5cm}%
+  }%
+  \vspace*{0.2cm}%
+}
+
+% ====================================================================
+%  Title page. Content comes from \title / \author / \institute in
+%  main.tex. Vertical spacing is controlled by the two \vspace values
+%  below -- top offset for the title block, bottom offset for
+%  affiliations.
+% ====================================================================
+% Optional argument: the speaker note for the title slide (plain text,
+% same rules as \pdfpcnote).
+\newcommand{\maketitlepage}[1][]{%
+  \begingroup
+    \setbeamercolor{background canvas}{bg=titlebg}%
+    \begin{frame}[plain]
+      \vspace*{0.22\paperheight}
+      {\usebeamerfont{title}\usebeamercolor[fg]{title}\inserttitle\par}
+      % Scope line, only if \subtitle{...} is non-empty in main.tex.
+      \ifx\insertsubtitle\@empty\else
+        \vspace{0.45em}
+        {\usebeamerfont{subtitle}\usebeamercolor[fg]{subtitle}\insertsubtitle\par}
+      \fi
+      \vspace{0.6em}
+      {\usebeamerfont{author}\usebeamercolor[fg]{author}\insertauthor\par}
+      \vfill
+      {\usebeamerfont{institute}\usebeamercolor[fg]{institute}\insertinstitute\par}
+      % Date line, only if \date{...} is non-empty in main.tex.
+      \ifx\insertdate\@empty\else
+        \vspace{0.3em}
+        {\usebeamerfont{date}\usebeamercolor[fg]{date}\insertdate\par}
+      \fi
+      \vspace{0.04\paperheight}
+      % Last, and grouped: \pdfpcnote redefines \\ as a literal "\n" for
+      % the note text, which would otherwise leak into the title lines.
+      \if\relax\detokenize{#1}\relax\else{\pdfpcnote{#1}}\fi
+    \end{frame}
+  \endgroup
+}
+
+% ====================================================================
+%  Inline emphasis helpers
+%
+%  \tmhi{...}   brand-blue bold, for the one phrase per slide that
+%               should catch the eye.
+%  \tmkbd{...}  monospace, for flags / connector names / config keys
+%               (e.g. \tmkbd{LMCacheMPConnector}). Uses the fallback
+%               mono font since FoundersGrotesk has no mono cut.
+% ====================================================================
+\newcommand{\tmhi}[1]{\textcolor{accent}{\textbf{#1}}}
+\newcommand{\tmkbd}[1]{{\ttfamily\small #1}}
+
+% \nextslidecue  a small gray arrow at the end of a line, reminding the
+%               presenter to click to the next slide at this point (the
+%               detour from "Why MP has more headroom"). Kept recessive
+%               so the room reads it as "more on this next", if at all.
+\newcommand{\nextslidecue}{\tikz[baseline=-0.55ex]\draw[tmarrow] (0,0) -- (0.4,0);}
+
+% \takeaway{...} -- a tinted bar pinned to the bottom of the frame
+% carrying the one plain-language sentence a non-specialist should
+% leave with. Mixed-audience decks live or die on these: the slide
+% body can stay as technical as it needs to be as long as every
+% frame states its point in words anyone can follow.
+\setbeamercolor{takeaway}{bg=takeawaybg, fg=takeawayfg}
+\setbeamerfont{takeaway}{family=\rmfamily, size=\fontsize{10}{13}\selectfont}
+\newcommand{\takeaway}[1]{%
+  \vfill
+  \begin{beamercolorbox}[wd=\textwidth, sep=6pt]{takeaway}%
+    \usebeamerfont{takeaway}\textbf{\textcolor{accent}{Takeaway}}\quad #1%
+  \end{beamercolorbox}%
+  \vspace*{0.2cm}%
+}
+
+% \setupline{...} -- one small gray line under a result chart stating what
+% was measured: model, topology, load, repetitions, statistic. Engineers
+% in the room read the results, not the speaker notes, so the setup has
+% to be on the slide. Keep it to one line; separate items with
+% \textperiodcentered.
+\newcommand{\setupline}[1]{%
+  \par\vspace{0.15em}%
+  {\centering\scriptsize\color{tmgray} #1\par}%
+}
+
+% ====================================================================
+%  Closing / Q&A page (\makeqapage)
+%
+%  Plain frame (no navbar, no page number) with a large headline,
+%  smaller subheadline, contact line, optional QR code on the right,
+%  and a centered row of acknowledgement logos at the bottom.
+%
+%  Headline / subheadline strings live in \qaheadline / \qasubheadline
+%  so they can be localized via \renewcommand in main.tex.
+%
+%  QR code: if a file named `qrcode.png` exists next to main.tex it
+%  is rendered automatically; otherwise the right column is empty.
+%
+%  Usage:
+%    \makeqapage[optional note]{Contact: Your Name \qaemail{you@example.edu}}{%
+%      \includegraphics[height=1cm]{logos/a.png}\hspace{1.5cm}
+%      \includegraphics[height=1cm]{logos/b.png}%
+%    }
+% ====================================================================
+\newcommand{\qaheadline}{Thank you!}
+\newcommand{\qasubheadline}{Any questions are welcome!}
+
+% Email styling: deck-red + underline (visual only; add \href{mailto:}
+% yourself if you want a real hyperlink).
+\newcommand{\qaemail}[1]{\textcolor{frametitlefg}{\underline{#1}}}
+
+\newcommand{\makeqapage}[3][]{%
+  % #1 = optional pdfpc note; #2 = contact line(s); #3 = additional
+  % bottom logos (free-form LaTeX).
+  % Flush the last \section{}'s frame count to the .aux *before* this
+  % frame ships out. Otherwise the Q&A's \begin{frame} bumps the
+  % per-section counter and inflates the final section's navbar slot.
+  \navbar@flushpending%
+  \begingroup
+    % Suppress the top-left icon overlay on this slide; the school
+    % logo instead appears as the leftmost acknowledgement logo at
+    % the bottom (rendered below).
+    \setbeamertemplate{background}{}%
+    \begin{frame}[plain]
+      \vspace*{0.16\paperheight}%
+      \begin{columns}[T]
+        \begin{column}{0.7\paperwidth}
+          \hspace*{0.08\paperwidth}%
+          \begin{minipage}{0.6\paperwidth}
+            % \mbox prevents the heading from wrapping if the rendered
+            % width exceeds the minipage; reduce the font size if you
+            % see overfull hbox warnings.
+            {\usebeamercolor[fg]{frametitle}%
+             \fontsize{40}{48}\selectfont\bfseries
+             \mbox{\qaheadline}\par}%
+            \vspace{0.15cm}%
+            {\fontsize{14}{18}\selectfont\bfseries
+             \qasubheadline\par}%
+            \vspace{0.5cm}%
+            {\fontsize{12}{15}\selectfont #2\par}%
+          \end{minipage}%
+        \end{column}%
+        \begin{column}{0.25\paperwidth}
+          \vspace*{1.6cm}%
+          \IfFileExists{qrcode.png}{%
+            \includegraphics[width=2.6cm]{qrcode.png}%
+          }{}%
+        \end{column}%
+      \end{columns}
+      \vfill
+      % Bottom row: school icon (if icon.png exists) followed by any
+      % additional logos passed in via #2. Inter-logo spacing is the
+      % caller's responsibility (start each extra logo with \hspace).
+      \centerline{%
+        \IfFileExists{icon.png}{%
+          \includegraphics[height=1cm]{icon.png}%
+        }{}%
+        #3%
+      }%
+      \vspace*{0.05\paperheight}%
+      % Last and grouped, as in \maketitlepage.
+      \if\relax\detokenize{#1}\relax\else{\pdfpcnote{#1}}\fi
+    \end{frame}
+  \endgroup
+}
+\makeatother

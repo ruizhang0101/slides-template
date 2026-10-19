@@ -1,0 +1,11 @@
+# Build artifacts
+build/
+*.pdf
+!main.pdf          # the template's own demo output, linked from the README
+
+# Commercial fonts must never be committed. theme.sty picks these up
+# automatically when present, and falls back when they are not.
+fonts/*.otf
+fonts/*.ttf
+
+.DS_Store

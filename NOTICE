@@ -1,0 +1,21 @@
+KV cache introduction slides
+Copyright 2026 Bo Jiang (Tensormesh)
+
+These slides were created by Bo Jiang for "Sharing the cache between
+engines", a Tensormesh weekly knowledge-sharing talk (September 2026).
+Licensed under the Apache License, Version 2.0; see LICENSE.
+
+Fonts: FoundersGrotesk (Klim Type Foundry) is a commercial typeface and
+is not included. Without it, the deck uses TeX Gyre Heros (GUST Font
+License), which ships with TeX Live.
+
+----------------------------------------------------------------------
+
+Slides template
+Copyright 2026 Rui Zhang
+
+This repository packages the Beamer theme above as a reusable template:
+the original talk content is removed, and theme.sty / style.sty are
+modified so the deck builds on a minimal TeX install -- the pdfpc
+package, TeX Gyre Heros and pgfplots are each optional, with fallbacks.
+Licensed under the Apache License, Version 2.0; see LICENSE.

@@ -1,0 +1,208 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{theme}[2026/05/04 Beamer theme -- user knobs]
+
+% ====================================================================
+%  This file holds the values you tweak when adjusting look-and-feel:
+%  colors, fonts, font sizes, and bar geometry.
+%
+%  How the templates use these values lives in style.sty.
+%  Load order in main.tex must be theme before style.
+% ====================================================================
+
+\RequirePackage{fontspec}
+% pdfpc embeds \pdfpcnote{...} content as PDF metadata, which pympress and
+% pdfpc read on the presenter screen. It is OPTIONAL: without it the deck
+% still builds and notes are simply dropped, so this template compiles on a
+% minimal TeX install (BasicTeX) as well as a full TeX Live or Overleaf.
+\newif\ifthemehaspdfpc
+\IfFileExists{pdfpc.sty}{\themehaspdfpctrue}{\themehaspdfpcfalse}
+
+\ifthemehaspdfpc
+  \RequirePackage{pdfpc}
+  % Override \pdfpcnote to set /F 34 (Hidden + NoView, no Print) so the
+  % annotation does not render as a yellow sticky-note icon in regular
+  % PDF viewers (macOS Preview, browsers, Evince, etc.) and does not
+  % appear on printed handouts. The package default is /F 6 (Hidden +
+  % Print), which most viewers ignore the Hidden bit on for /Subtype
+  % /Text. pympress / pdfpc read /Contents directly, ignoring /F.
+  \makeatletter
+  \ifXeTeX
+    \renewcommand<>{\pdfpcnote}[1]{%
+      \only#2{%
+        \edef\\{\string\n}%
+        \special{pdf: ann width 0pt height 0pt depth 0pt
+           << /Subtype /Text /Contents (#1) /F 34 >>}%
+      }%
+      \relax
+    }%
+  \fi
+  % LuaTeX path is omitted; if you ever switch back to lualatex, mirror
+  % the package's \pdfannot definition and replace /F 6 with /F 34.
+  \makeatother
+\else
+  \providecommand{\pdfpcnote}[1]{}
+  \PackageWarning{theme}{pdfpc.sty not found: speaker notes are omitted
+    from the PDF. Install the pdfpc package to embed them}
+\fi
+
+% ====================================================================
+%  Fonts
+%
+%  FoundersGrotesk is a commercial typeface and is NOT distributed with
+%  this repository. If you hold a license, drop its .otf files into
+%  fonts/ and they are used automatically. Otherwise the deck falls back
+%  to TeX Gyre Heros, a free Helvetica-style face (GUST Font License)
+%  that ships with TeX Live.
+% ====================================================================
+% Three tiers, best first. The deck builds on any of them.
+%   1. FoundersGrotesk   -- the original face, if you hold a license
+%   2. TeX Gyre Heros    -- free Helvetica clone, ships with full TeX Live
+%   3. a system sans     -- last resort, so a minimal install still builds
+\newcommand{\themesystemsans}{%
+  \IfFontExistsTF{Helvetica Neue}%
+    {\setmainfont{Helvetica Neue}\setsansfont{Helvetica Neue}}%
+    {\IfFontExistsTF{Helvetica}%
+      {\setmainfont{Helvetica}\setsansfont{Helvetica}}%
+      {\IfFontExistsTF{Arial}%
+        {\setmainfont{Arial}\setsansfont{Arial}}%
+        {}}}%
+}
+
+\IfFileExists{fonts/FoundersGrotesk-Medium.otf}{%
+  \defaultfontfeatures{
+    Path = fonts/,
+    Extension = .otf,
+    Ligatures = TeX,    % so -- / --- / `` '' come out as en/em dash, quotes
+    UprightFont = *-Medium,
+    ItalicFont = *-MediumItalic,
+    BoldFont = *-Bold,
+    BoldItalicFont = *-BoldItalic,
+  }
+  \setmainfont{FoundersGrotesk}
+  \setsansfont{FoundersGrotesk}
+}{%
+  \IfFontExistsTF{texgyreheros-regular.otf}{%
+    % Loaded by file name, not family name, so it resolves through the TeX
+    % tree on any install (Overleaf included).
+    \defaultfontfeatures{
+      Extension = .otf,
+      Ligatures = TeX,
+      UprightFont = *-regular,
+      ItalicFont = *-italic,
+      BoldFont = *-bold,
+      BoldItalicFont = *-bolditalic,
+    }
+    \setmainfont{texgyreheros}
+    \setsansfont{texgyreheros}
+  }{%
+    \defaultfontfeatures{Ligatures = TeX}
+    \themesystemsans
+    \PackageWarning{theme}{Neither FoundersGrotesk nor TeX Gyre Heros was
+      found; falling back to a system sans. Install the tex-gyre package
+      for the intended look}
+  }%
+}
+
+% ====================================================================
+%  Colors -- Tensormesh brand palette
+%
+%  Sampled from tensormesh.ai:
+%    ink        #1B1917   near-black, the site's primary surface
+%    ink-soft   #3F3B38   lifted ink (unfilled portion of the navbar)
+%    warm-gray  #625F5B / #A5A19D   secondary text
+%    blue       #668EE8   brand accent
+%    blue-deep  #214CAE   accent at text-on-white contrast
+%    blue-pale  #DAE9FF   tint, for callout backgrounds
+%
+%  icon.png is the Tensormesh mark knocked out of an ink square, so
+%  `navactivebg` MUST stay equal to `ink` -- the navbar progress fill
+%  runs underneath the icon and any mismatch shows as a seam.
+% ====================================================================
+\definecolor{tmink}{HTML}{1B1917}
+\definecolor{tminksoft}{HTML}{3F3B38}
+\definecolor{tmgray}{HTML}{625F5B}
+\definecolor{tmgraylight}{HTML}{A5A19D}
+\definecolor{tmblue}{HTML}{668EE8}
+\definecolor{tmbluedeep}{HTML}{214CAE}
+\definecolor{tmbluepale}{HTML}{DAE9FF}
+
+% Title-page colors.
+\colorlet{titlebg}{tmink}          % title page background
+\colorlet{titlefg}{white}          % title page title
+\colorlet{subtitlefg}{tmgraylight} % title page subtitle (scope line)
+\colorlet{authorfg}{tmblue}        % title page author(s)
+\colorlet{institutefg}{white}      % title page institute
+\colorlet{datefg}{tmgraylight}     % title page date line
+
+% Top navigation-bar colors.
+% navbarbg is the "not yet reached" portion of the bar (lighter);
+% navactivebg is the progress fill that grows left-to-right as the
+% deck advances (darker, and flush with the icon background).
+\colorlet{navbarbg}{tminksoft}     % bar background (unfilled, lighter)
+\colorlet{navbarfg}{tmgraylight}   % section names on the bar
+\colorlet{navactivebg}{tmink}      % progress fill (darker, matches titlebg)
+\colorlet{navactivefg}{white}      % current section text
+
+% Content colors.
+\colorlet{frametitlefg}{tmbluedeep}   % frame title (page heading)
+\colorlet{framesubtitlefg}{tmgray}    % frame subtitle
+\colorlet{pagenumberfg}{tmgray}       % page number, bottom-right
+\colorlet{accent}{tmbluedeep}         % \alert{...} and inline emphasis
+\colorlet{takeawaybg}{tmbluepale}     % \takeaway{...} bar background
+\colorlet{takeawayfg}{tmink}          % \takeaway{...} bar text
+
+% Chart series colors. Two categorical hues, validated against the
+% six checks (OKLab dE: CVD 26.3 vs target 8, normal-vision 32.8 vs
+% floor 15, both >3:1 on white). Assign in fixed order; never cycle.
+\definecolor{tmochre}{HTML}{C2703D}
+\colorlet{chartone}{tmbluedeep}        % series 1 -- assign this first
+\colorlet{charttwo}{tmochre}           % series 2 -- and this second
+\colorlet{chartgrid}{tmgraylight}      % recessive grid / axis lines
+
+% ====================================================================
+%  Font sizes
+% ====================================================================
+\setbeamerfont{title}{family=\rmfamily,
+  size=\fontsize{22}{27}\selectfont}
+\setbeamerfont{subtitle}{family=\rmfamily,
+  size=\fontsize{13}{17}\selectfont}
+\setbeamerfont{author}{family=\rmfamily,
+  size=\fontsize{11}{14}\selectfont}
+\setbeamerfont{institute}{family=\rmfamily,
+  size=\fontsize{9}{11}\selectfont}
+\setbeamerfont{date}{family=\rmfamily,
+  size=\fontsize{9}{11}\selectfont}
+\setbeamerfont{frametitle}{family=\rmfamily,
+  size=\fontsize{18}{22}\selectfont}
+\setbeamerfont{framesubtitle}{family=\rmfamily,
+  size=\fontsize{12}{14}\selectfont, shape=\itshape, series=\bfseries}
+\setbeamerfont{section in head/foot}{family=\rmfamily,
+  size=\fontsize{7}{8}\selectfont}
+\setbeamerfont{page number}{family=\rmfamily,
+  size=\fontsize{8}{10}\selectfont}
+
+% ====================================================================
+%  Bar geometry
+%
+%  \navbarheight matches the school icon height; the icon is rendered
+%  flush in the top-left so the bar visually butts up against it.
+%  \navlogogap reserves horizontal space at the left of the bar so
+%  section text never runs underneath the icon.
+%  \navbarslotpad is the clear space kept on each side of a section
+%  name: no slot is narrower than its name plus twice this, however
+%  few frames the section has.
+% ====================================================================
+\newlength{\navbarheight}\setlength{\navbarheight}{0.5cm}
+\newlength{\navlogogap}\setlength{\navlogogap}{0.55cm}
+\newlength{\navbarslotpad}\setlength{\navbarslotpad}{0.2cm}
+
+% ====================================================================
+%  Speaker notes
+%
+%  Use \pdfpcnote{Your speaker note} after each frame. The note is
+%  written into PDF metadata (no extra pages, PDF stays single-width),
+%  and pympress / pdfpc display it on the presenter screen automatically.
+%
+%  Plain LaTeX is allowed inside the braces. For pympress, launch with
+%  `pympress main.pdf` -- it auto-detects pdfpc notes. No flags needed.
+% ====================================================================

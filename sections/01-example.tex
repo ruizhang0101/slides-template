@@ -1,0 +1,44 @@
+% One section = one slot on the top navigation bar, sized by how many
+% frames it holds. Add \section{...} for each movement of the talk.
+\section{Example section}
+
+% A frame takes a title and a subtitle. The title says the topic; the
+% subtitle says the angle. Keep one grammar across the deck.
+\begin{frame}{A frame title}{And its subtitle}
+  Body text goes here. Keep it to a few lines: the frame title and the
+  \textbf{Takeaway} bar carry the point, and the body carries the detail.
+  \\[0.7em]
+  Lists work the way you expect:
+  \begin{itemize}
+    \item one idea per bullet, in parallel grammar;
+    \item \tmhi{one highlighted phrase} per slide, no more;
+    \item \alert{alert} is the inline accent for a single word.
+  \end{itemize}
+  % \takeaway is one plain-language sentence. Write it for someone who
+  % reads nothing else on the slide.
+  \takeaway{One sentence that states the point of this slide in plain
+    language.}
+  % \pdfpcnote must be the LAST element of the frame: it redefines \\ as
+  % a literal newline, so anything after it loses its line breaks.
+  \pdfpcnote{The spoken script for this slide. Plain text only. Write it
+    the way you will say it out loud, not as a summary of the slide --
+    the slide is already on screen.}
+\end{frame}
+
+\begin{frame}{A frame with a diagram}{Figures live under figures/}
+  Diagrams are TikZ, kept in their own file so this one stays readable.
+  \begin{center}
+    \input{figures/example-diagram}
+  \end{center}
+  % House style for diagrams: gray outlines (tmbox) everywhere, and the
+  % pale-blue fill (tmboxfill) reserved for the one thing the diagram is
+  % about. At most one kind of fill per diagram.
+  \takeaway{The pale-blue fill marks the one thing the diagram is about.}
+  \pdfpcnote{Talk through the diagram here.}
+\end{frame}
+
+% Closing slide. [note] is optional; #2 is the contact line(s); #3 is
+% free-form LaTeX for any logos along the bottom (leave empty if none).
+\makeqapage[Spoken note for the closing slide.]{%
+  Your Name \quad\textbullet\quad your.name@example.edu
+}{}
